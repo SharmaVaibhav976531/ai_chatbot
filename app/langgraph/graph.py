@@ -10,12 +10,12 @@ from app.langgraph.nodes import (
 
 def route_after_planner(state: AgentState) -> str:
     """Determines the next node based on the planner's decision."""
-    action = state.get("next_action", "direct")
+    action = state.get("next_action", "agent")
     if action == "rag":
         return "retriever"
     elif action == "tool":
-        return "reasoner" # Go to reasoner to format tool prompt, then LLM
-    else:
+        return "reasoner"
+    else: # "agent" or "direct"
         return "reasoner"
 
 def route_after_llm(state: AgentState) -> str:

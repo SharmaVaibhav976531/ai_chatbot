@@ -11,6 +11,9 @@ from app.vectorstore.factory import VectorStoreFactory
 from app.embeddings.factory import EmbeddingsFactory
 from app.core.config import settings
 from app.services.context import ContextManager
+from app.agents.factory import AgentFactory
+from app.memory.manager import MemoryManager
+from app.database.redis import redis_client
 
 logger = structlog.get_logger()
 
@@ -33,25 +36,29 @@ def memory_node(state: AgentState) -> dict:
     return {"messages": []}
 
 def planner_node(state: AgentState) -> dict:
-    """
-    Analyzes the user query and decides the next action:
-    - 'direct': Simple conversational response.
-    - 'rag': Requires external knowledge retrieval.
-    - 'tool': Requires executing a tool (e.g., calculator, search).
-    """
+    """Analyzes the user query and selects the best Agent to handle it."""
     last_message = state["messages"][-1].content.lower()
+    user_id = state["user_id"]
     
-    # Simple heuristic routing for demonstration. 
-    # In production, this would be an LLM call or a more complex classifier.
-    if any(keyword in last_message for keyword in ["calculate", "math", "sum", "multiply"]):
+    # Heuristic routing (In production, use an LLM classifier)
+    if any(k in last_message for k in ["summarize", "summary", "tldr"]):
+        selected_agent = "summary"
+        next_action = "agent"
+    elif any(k in last_message for k in ["search", "news", "current", "internet"]):
+        selected_agent = "search"
+        next_action = "agent"
+    elif any(k in last_message for k in ["document", "file", "pdf", "context"]):
+        selected_agent = "knowledge"
+        next_action = "agent"
+    elif any(k in last_message for k in ["calculate", "math"]):
+        selected_agent = "chat"
         next_action = "tool"
-    elif any(keyword in last_message for keyword in ["document", "file", "pdf", "context", "what does the document say"]):
-        next_action = "rag"
     else:
-        next_action = "direct"
+        selected_agent = "chat"
+        next_action = "agent"
         
-    logger.info("planner_routed", chat_id=state["chat_id"], action=next_action)
-    return {"next_action": next_action}
+    logger.info("planner_selected_agent", chat_id=state["chat_id"], agent=selected_agent)
+    return {"selected_agent": selected_agent, "next_action": next_action}
 
 def retriever_node(state: AgentState) -> dict:
     """Fetches relevant documents from the Vector Database."""
@@ -85,18 +92,24 @@ def rag_node(state: AgentState) -> dict:
     return {"retrieved_context": formatted_context}
 
 def reasoner_node(state: AgentState) -> dict:
-    """Synthesizes the state into a structured prompt for the LLM."""
+    """Synthesizes the state into a structured prompt using the selected Agent's configuration."""
     messages = state["messages"]
-    next_action = state["next_action"]
+    selected_agent_name = state.get("selected_agent", "chat")
     
-    system_prompt = "You are a helpful AI assistant."
+    # Instantiate the agent to get its specific prompt and tools
+    agent = AgentFactory.get_agent(selected_agent_name, state["user_id"])
     
-    if next_action == "rag":
-        system_prompt += f"\n\nUse the following context to answer the user's question:\n{state['retrieved_context']}"
-    elif next_action == "tool":
-        system_prompt += "\n\nYou have access to tools. If you need to use a tool, respond with a JSON object containing 'tool_calls'."
+    system_prompt = agent.system_prompt
+    
+    # Inject context if available (for RAG/Knowledge agents)
+    if state.get("retrieved_context"):
+        system_prompt += f"\n\nContext:\n{state['retrieved_context']}"
         
-    # Inject system prompt at the beginning of the message list
+    # Inject tool descriptions if tools are available
+    if agent.tools:
+        system_prompt += f"\n\nAvailable Tools:\n{agent.get_tool_descriptions()}"
+        system_prompt += "\n\nIf you need to use a tool, respond with a JSON object: {\"tool_calls\": [{\"name\": \"tool_name\", \"args\": {\"input\": \"value\"}}]}"
+
     if not messages or not isinstance(messages[0], SystemMessage):
         messages.insert(0, SystemMessage(content=system_prompt))
     else:
@@ -145,30 +158,38 @@ def llm_node(state: AgentState) -> dict:
     }
 
 def tool_executor_node(state: AgentState) -> dict:
-    """Executes requested tools and feeds the result back to the LLM."""
+    """Executes requested tools using the selected Agent's tool registry."""
     tool_calls = state.get("tool_calls", [])
-    results = []
+    selected_agent_name = state.get("selected_agent", "chat")
     
+    agent = AgentFactory.get_agent(selected_agent_name, state["user_id"])
+    tool_map = {t.name: t for t in agent.tools}
+    
+    results = []
     for call in tool_calls:
         tool_name = call.get("name")
         args = call.get("args", {})
+        input_data = args.get("input", "")
         
-        if tool_name == "calculator":
+        if tool_name in tool_map:
             try:
-                # Safe evaluation for basic math
-                result = eval(args.get("expression", "0"), {"__builtins__": {}}, {})
+                # Tools are async
+                import asyncio
+                loop = asyncio.new_event_loop()
+                try:
+                    result = loop.run_until_complete(tool_map[tool_name].run(input_data))
+                finally:
+                    loop.close()
                 results.append(f"Tool '{tool_name}' result: {result}")
             except Exception as e:
                 results.append(f"Tool '{tool_name}' error: {str(e)}")
         else:
-            results.append(f"Tool '{tool_name}' not found.")
+            results.append(f"Tool '{tool_name}' not available for this agent.")
             
     tool_output = "\n".join(results)
-    logger.info("tools_executed", chat_id=state["chat_id"], tools=[c.get("name") for c in tool_calls])
-    
     return {
         "messages": [AIMessage(content=f"Tool execution results:\n{tool_output}\n\nPlease summarize this for the user.")],
-        "tool_calls": [] # Clear tool calls after execution
+        "tool_calls": []
     }
 
 def response_generator_node(state: AgentState) -> dict:

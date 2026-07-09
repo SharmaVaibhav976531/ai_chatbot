@@ -58,3 +58,7 @@ pinecone-client
 # LangGraph & Workflow
 langgraph
 langchain-core
+
+# Agents & Tools
+duckduckgo-search
+

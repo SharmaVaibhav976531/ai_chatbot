@@ -6,20 +6,19 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
 class AgentState(TypedDict):
-    """
-    Defines the state schema for the AI Workflow graph.
-    This state is passed through and mutated by each node.
-    """
-    # Core conversation messages (managed by LangGraph's add_messages annotation)
+    """Defines the state schema for the AI Workflow graph."""
     messages: Annotated[list[BaseMessage], add_messages]
     
-    # Context & Metadata
     user_id: int
     chat_id: str
     provider: str
     model: str | None
     
-    # RAG Specific
+    # Agent & Routing
+    selected_agent: str  # New: Tracks which agent is handling the request
+    next_action: Literal["direct", "rag", "tool", "agent"]
+    
+    # RAG & Tools
     retrieved_context: str
     
     # Routing & Execution
