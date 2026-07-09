@@ -2,5 +2,10 @@
 
 from app.vectorstore.base import BaseVectorStore
 from app.vectorstore.chroma import ChromaVectorStore
+from app.vectorstore.factory import VectorStoreFactory
 
-__all__ = ["BaseVectorStore", "ChromaVectorStore"]
+__all__ = [
+    "BaseVectorStore", 
+    "ChromaVectorStore",
+    "VectorStoreFactory",
+    ]

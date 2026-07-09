@@ -56,7 +56,13 @@ class Settings(BaseSettings):
     PINECONE_ENVIRONMENT: str = ""
 
     # Embeddings
-    EMBEDDINGS_PROVIDER: str = "openai"  # Options: openai, sentence_transformers
+    EMBEDDINGS_PROVIDER: str = "openai"
     EMBEDDINGS_MODEL: str = "text-embedding-3-small"
+
+    # Vector Database
+    VECTOR_DB_PROVIDER: str = "chroma"
+    PINECONE_API_KEY: str = ""
+    PINECONE_INDEX_NAME: str = "chatbot-documents"
+    PINECONE_ENVIRONMENT: str = "us-east-1"
 
 settings = Settings()

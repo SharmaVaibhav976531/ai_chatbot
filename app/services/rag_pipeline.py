@@ -10,6 +10,7 @@ from app.services.document_extraction import DocumentExtractor
 from app.services.document_chunking import DocumentChunker
 from app.embeddings.factory import EmbeddingsFactory
 from app.vectorstore.chroma import ChromaVectorStore
+from app.vectorstore.factory import VectorStoreFactory
 from app.core.config import settings
 
 logger = structlog.get_logger()
@@ -26,7 +27,8 @@ class RAGPipeline:
             settings.EMBEDDINGS_PROVIDER, 
             settings.EMBEDDINGS_MODEL
         )
-        self.vectorstore = ChromaVectorStore()
+        # self.vectorstore = ChromaVectorStore()
+        self.vectorstore = VectorStoreFactory.get_vector_store()
 
     async def process_document(self, document_id: uuid.UUID, file_content: bytes) -> None:
         """Executes the full RAG pipeline for a single document."""

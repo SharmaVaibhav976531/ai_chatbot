@@ -49,3 +49,9 @@ langchain-community
 langchain-text-splitters
 sentence-transformers
 chromadb
+
+
+# Vector Databases
+faiss-cpu
+pinecone-client
+
