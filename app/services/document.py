@@ -14,6 +14,11 @@ class DocumentService:
         self.session = session
         self.doc_repo = DocumentRepository(session)
 
+    async def create_document(self, user_id: int, filename: str, file_type: str, file_size: int, storage_path: str) -> DocumentResponse:
+        """Creates a new document record in the database."""
+        doc = await self.doc_repo.create(user_id, filename, file_type, file_size, storage_path)
+        return DocumentResponse.model_validate(doc)
+
     async def get_user_documents(self, user_id: int, skip: int, limit: int) -> list[DocumentResponse]:
         docs = await self.doc_repo.get_user_documents(user_id, skip, limit)
         return [DocumentResponse.model_validate(d) for d in docs]

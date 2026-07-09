@@ -55,4 +55,8 @@ class Settings(BaseSettings):
     PINECONE_API_KEY: str = ""
     PINECONE_ENVIRONMENT: str = ""
 
+    # Embeddings
+    EMBEDDINGS_PROVIDER: str = "openai"  # Options: openai, sentence_transformers
+    EMBEDDINGS_MODEL: str = "text-embedding-3-small"
+
 settings = Settings()
