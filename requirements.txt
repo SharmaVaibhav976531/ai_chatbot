@@ -55,3 +55,6 @@ chromadb
 faiss-cpu
 pinecone-client
 
+# LangGraph & Workflow
+langgraph
+langchain-core

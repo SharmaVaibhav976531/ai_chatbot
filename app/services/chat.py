@@ -13,7 +13,8 @@ from app.models.message import MessageRole
 from app.services.context import ContextManager
 from app.services.session import SessionManager
 from app.llms.factory import LLMFactory
-
+from langchain_core.messages import HumanMessage
+from app.langgraph.graph import compiled_graph
 
 class ChatService:
     """Service for handling chat and message business logic."""
@@ -76,31 +77,67 @@ class ChatService:
         self, chat_id: uuid.UUID, user_id: int, content: str, 
         provider: str, model: str | None, redis_client: aioredis.Redis
     ) -> AsyncGenerator[str, None]:
-        """Processes a user message and streams the assistant's response via SSE."""
+        """Processes a user message using the LangGraph workflow and streams the response."""
         session_mgr = SessionManager(redis_client)
         
         await session_mgr.acquire_lock(chat_id)
         
         try:
+            # 1. Save user message
             await self.add_message(chat_id, user_id, MessageRole.USER, content)
             
+            # 2. Auto-title if first message
             messages = await self.message_repo.get_chat_messages(chat_id, limit=2)
             if len(messages) == 1:
                 await self._auto_title_chat(chat_id, content)
             
+            # 3. Get full history for context
             all_messages = await self.message_repo.get_chat_messages(chat_id, limit=100)
             context_mgr = ContextManager()
-            context = context_mgr.build_context(all_messages)
             
-            # Instantiate the requested LLM via the Factory
-            llm = LLMFactory.get_llm(provider, model)
+            # Convert DB messages to LangChain messages for the graph
+            lc_messages = []
+            for msg in all_messages:
+                if msg.role == MessageRole.USER:
+                    lc_messages.append(HumanMessage(content=msg.content))
+                elif msg.role == MessageRole.ASSISTANT:
+                    lc_messages.append(AIMessage(content=msg.content))
+                elif msg.role == MessageRole.SYSTEM:
+                    lc_messages.append(SystemMessage(content=msg.content))
+
+            # 4. Prepare initial state for LangGraph
+            initial_state = {
+                "messages": lc_messages,
+                "user_id": user_id,
+                "chat_id": str(chat_id),
+                "provider": provider,
+                "model": model,
+                "retrieved_context": "",
+                "next_action": "direct",
+                "tool_calls": [],
+                "final_response": ""
+            }
+
+            # 5. Invoke the LangGraph workflow
+            # Note: For true streaming from LangGraph, we would use `astream_events`.
+            # Here we invoke synchronously and stream the final result to maintain 
+            # compatibility with our existing SSE implementation.
+            final_state = compiled_graph.invoke(initial_state)
             
-            assistant_content = ""
-            async for chunk in llm.stream(context):
-                assistant_content += chunk
+            assistant_content = final_state.get("final_response", "No response generated.")
+            
+            # Simulate streaming for the client (In a full implementation, 
+            # you would use LangGraph's astream_events to stream token-by-token)
+            words = assistant_content.split(" ")
+            for i in range(0, len(words), 3):
+                chunk = " ".join(words[i:i+3]) + " "
                 yield f"data: {json.dumps({'content': chunk})}\n\n"
+                await asyncio.sleep(0.05) # Simulate network delay
             
+            # 6. Save assistant message
             await self.add_message(chat_id, user_id, MessageRole.ASSISTANT, assistant_content)
+            
+            # 7. Send completion event
             yield f"data: {json.dumps({'done': True})}\n\n"
             
         finally:
