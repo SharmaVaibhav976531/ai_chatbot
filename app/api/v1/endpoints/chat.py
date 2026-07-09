@@ -110,13 +110,14 @@ async def stream_message(
     current_user: CurrentUser,
     session: Annotated[AsyncSession, Depends(get_async_session)],
     redis_client: Annotated[aioredis.Redis, Depends(get_redis)]
-    ) -> StreamingResponse:
+) -> StreamingResponse:
     """Sends a message and streams the assistant's response via Server-Sent Events (SSE)."""
     chat_service = ChatService(session)
 
     async def event_generator():
         async for chunk in chat_service.stream_message(
-            chat_id, current_user.id, message_in.content, redis_client
+            chat_id, current_user.id, message_in.content, 
+            message_in.provider, message_in.model, redis_client
         ):
             yield chunk
 
@@ -126,6 +127,6 @@ async def stream_message(
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",  # Disable nginx buffering for real-time streaming
+            "X-Accel-Buffering": "no",
         }
     )

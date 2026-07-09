@@ -5,7 +5,6 @@ from collections.abc import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession
 import redis.asyncio as aioredis
 from datetime import datetime, timezone
-from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import NotFoundException, ForbiddenException, BadRequestException
 from app.repositories.chat import ChatRepository
 from app.repositories.message import MessageRepository
@@ -74,68 +73,38 @@ class ChatService:
         return [ChatResponse.model_validate(c) for c in chats]
 
     async def stream_message(
-        self, chat_id: uuid.UUID, user_id: int, content: str, redis_client: aioredis.Redis
+        self, chat_id: uuid.UUID, user_id: int, content: str, 
+        provider: str, model: str | None, redis_client: aioredis.Redis
     ) -> AsyncGenerator[str, None]:
         """Processes a user message and streams the assistant's response via SSE."""
         session_mgr = SessionManager(redis_client)
         
-        # 1. Acquire distributed lock
         await session_mgr.acquire_lock(chat_id)
         
         try:
-            # 2. Save user message
             await self.add_message(chat_id, user_id, MessageRole.USER, content)
             
-            # 3. Auto-title if it's the first message
             messages = await self.message_repo.get_chat_messages(chat_id, limit=2)
             if len(messages) == 1:
                 await self._auto_title_chat(chat_id, content)
             
-            # 4. Get full history for context
             all_messages = await self.message_repo.get_chat_messages(chat_id, limit=100)
             context_mgr = ContextManager()
             context = context_mgr.build_context(all_messages)
             
-            # 5. Stream LLM response
+            # Instantiate the requested LLM via the Factory
+            llm = LLMFactory.get_llm(provider, model)
+            
             assistant_content = ""
-            async for chunk in self._call_llm_stream(context):
+            async for chunk in llm.stream(context):
                 assistant_content += chunk
-                # Yield SSE formatted data
                 yield f"data: {json.dumps({'content': chunk})}\n\n"
             
-            # 6. Save assistant message
             await self.add_message(chat_id, user_id, MessageRole.ASSISTANT, assistant_content)
-            
-            # 7. Send completion event
             yield f"data: {json.dumps({'done': True})}\n\n"
             
         finally:
-            # 8. Release distributed lock
             await session_mgr.release_lock(chat_id)
-
-    async def _call_llm_stream(self, context: list[dict]) -> AsyncGenerator[str, None]:
-        """
-        Calls the LLM and streams the response. 
-        Direct OpenAI implementation for Phase 4 (to be abstracted in Phase 5).
-        """
-        from openai import AsyncOpenAI
-        from app.core.config import settings
-        
-        if not settings.OPENAI_API_KEY:
-            # Fallback mock if no API key is provided, ensuring the app doesn't crash during dev
-            yield "OpenAI API key not configured. "
-            yield "Please set OPENAI_API_KEY in your environment variables."
-            return
-
-        client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-        stream = await client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=context,
-            stream=True,
-        )
-        async for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
 
     async def _auto_title_chat(self, chat_id: uuid.UUID, first_message: str) -> None:
         """Generates a title for the chat based on the first message."""
