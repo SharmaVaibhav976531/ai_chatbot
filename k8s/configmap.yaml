@@ -1,0 +1,15 @@
+# backend/k8s/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: ai-chatbot-platform
+data:
+  APP_ENV: "production"
+  DEBUG: "false"
+  POSTGRES_HOST: "postgres-service"
+  REDIS_HOST: "redis-service"
+  VECTOR_DB_PROVIDER: "chroma"
+  EMBEDDINGS_PROVIDER: "openai"
+  STORAGE_PROVIDER: "s3"
+  AWS_REGION: "us-east-1"

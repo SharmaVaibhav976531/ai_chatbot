@@ -65,4 +65,11 @@ class Settings(BaseSettings):
     PINECONE_INDEX_NAME: str = "chatbot-documents"
     PINECONE_ENVIRONMENT: str = "us-east-1"
 
+    # Storage
+    STORAGE_PROVIDER: str = "local"  # Options: local, s3
+    AWS_S3_BUCKET: str = ""
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_REGION: str = "us-east-1"
+
 settings = Settings()

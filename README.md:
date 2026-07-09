@@ -1,0 +1,36 @@
+# Enterprise AI Chatbot Platform
+
+A production-ready, multi-agent AI chatbot backend built with Python, FastAPI, LangGraph, and enterprise-grade infrastructure.
+
+## 🏗 Architecture
+
+The system follows **Clean Architecture** and **SOLID** principles, separating concerns into distinct layers:
+- **API Layer**: FastAPI routers handling HTTP requests and SSE streaming.
+- **Service Layer**: Business logic orchestration.
+- **Repository Layer**: Database and Vector Store abstractions.
+- **AI Layer**: LangGraph workflows, specialized Agents, and Tools.
+
+![Architecture Diagram](docs/architecture.mmd)
+
+## 🚀 Features
+
+- **Multi-Provider LLM**: Seamless switching between OpenAI, Anthropic Claude, Google Gemini, and Ollama.
+- **Advanced RAG**: Document ingestion (PDF, DOCX, TXT), intelligent chunking, and hybrid vector search (Chroma, FAISS, Pinecone).
+- **LangGraph Workflows**: Configurable state machines for routing, tool execution, and memory management.
+- **Multi-Agent System**: Specialized agents (Chat, Knowledge, Search, Document, Summary) with dedicated toolsets.
+- **Enterprise Security**: JWT Auth, RBAC, Rate Limiting, and Prompt Injection protection.
+- **AWS Ready**: Native S3 integration, RDS/ElastiCache compatible, and Kubernetes deployment manifests.
+
+## 🛠 Tech Stack
+
+- **Backend**: Python 3.12, FastAPI, SQLAlchemy 2.0 (Async), Alembic
+- **AI/ML**: LangGraph, LangChain, OpenAI, Anthropic, Gemini, Ollama
+- **Data**: PostgreSQL, Redis, ChromaDB, FAISS, Pinecone
+- **Infra**: Docker, Kubernetes, AWS (S3, RDS)
+
+## 📦 Installation & Local Development
+
+1. **Clone the repository**
+   ```bash
+   git clone <repo-url>
+   cd backend

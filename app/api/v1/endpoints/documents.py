@@ -12,6 +12,7 @@ from app.schemas.document import DocumentResponse
 from app.services.document import DocumentService
 from app.services.rag_pipeline import process_document_task
 from app.core.exceptions import BadRequestException
+from app.storage.factory import StorageFactory
 
 router = APIRouter()
 
@@ -40,15 +41,22 @@ async def upload_document(
     if file_size > MAX_FILE_SIZE_MB * 1024 * 1024:
         raise BadRequestException(f"File size exceeds maximum limit of {MAX_FILE_SIZE_MB}MB")
 
-    # Save to local storage (In production, this would be S3/GCS)
-    storage_dir = "./storage/documents"
-    os.makedirs(storage_dir, exist_ok=True)
-    file_id = uuid.uuid4()
+    # Replace local file saving with Storage Factory
+    storage = StorageFactory.get_storage()
     storage_filename = f"{file_id}.{ext}"
-    storage_path = os.path.join(storage_dir, storage_filename)
     
-    with open(storage_path, "wb") as f:
-        f.write(content)
+    # In S3, destination is just the key. In Local, it's the filename.
+    storage_path = await storage.save(content, storage_filename)
+
+    # # Save to local storage (In production, this would be S3/GCS)
+    # storage_dir = "./storage/documents"
+    # os.makedirs(storage_dir, exist_ok=True)
+    # file_id = uuid.uuid4()
+    # storage_filename = f"{file_id}.{ext}"
+    # storage_path = os.path.join(storage_dir, storage_filename)
+    
+    # with open(storage_path, "wb") as f:
+    #     f.write(content)
 
     # Create DB record
     doc_service = DocumentService(session)
